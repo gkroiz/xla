@@ -74,6 +74,9 @@ import torch_xla.test.test_utils as test_utils
 import torch.distributed as dist
 import torch_xla.distributed.xla_backend
 
+# for lightning fabric
+from lightning.fabric import Fabric
+
 DEFAULT_KWARGS = dict(
     batch_size=128,
     test_set_batch_size=64,
@@ -200,11 +203,18 @@ def train_imagenet():
         drop_last=FLAGS.drop_last,
         shuffle=False,
         num_workers=FLAGS.num_workers)
+  
+  # fabric setup for dataloaders 
+  fabric = Fabric()
+  train_loader = fabric.setup_dataloaders(train_loader)
+  test_loader = fabric.setup_dataloaders(test_loader)
 
   torch.manual_seed(42)
 
   device = xm.xla_device()
-  model = get_model_property('model_fn')().to(device)
+  
+  # commented out since Fabric will take care of this
+  # model = get_model_property('model_fn')().to(device)
 
   # Initialization is nondeterministic with multiple threads in PjRt.
   # Synchronize model parameters across replicas manually.
@@ -222,6 +232,10 @@ def train_imagenet():
       lr=FLAGS.lr,
       momentum=FLAGS.momentum,
       weight_decay=1e-4)
+  
+  # fabric setup for model and optimizer
+  model, optimizer = fabric.setup(model, optimizer)
+
   num_training_steps_per_epoch = train_dataset_len // (
       FLAGS.batch_size * xm.xrt_world_size())
   lr_scheduler = schedulers.wrap_optimizer_with_scheduler(
@@ -246,7 +260,7 @@ def train_imagenet():
           optimizer.zero_grad()
           output = model(data)
           loss = loss_fn(output, target)
-          loss.backward()
+          fabric.backward(loss)
       if FLAGS.ddp:
         optimizer.step()
       else:
