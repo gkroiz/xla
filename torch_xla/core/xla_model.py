@@ -997,7 +997,7 @@ def rendezvous(tag, payload=b'', replicas=[]):
     The payloads exchanged by all the other cores, with the payload of core
     ordinal `i` at position `i` in the returned tuple.
   """
-  if pjrt.using_pjrt():
+  if pjrt.using_pjrt() and payload != b'':
     return pjrt.rendezvous(tag, payload, replicas or None)
 
   return torch_xla._XLAC._xla_rendezvous(get_ordinal(), tag, payload, replicas)
